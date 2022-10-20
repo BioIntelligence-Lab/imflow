@@ -1,1 +1,1 @@
-# ImFlow: A Better Image Dataset Loader for TensorFlow
+# ImFlow: An Image Dataset Loader for TensorFlow
