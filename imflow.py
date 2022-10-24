@@ -272,6 +272,7 @@ def image_dataset_from_csv(
     csv_path,
     path_col,
     label_col,
+    image_dir='',
     label_mode='int',
     class_names=None,
     color_mode='rgb',
@@ -285,13 +286,14 @@ def image_dataset_from_csv(
     crop_to_aspect_ratio=False
 ):
     df = pd.read_csv(csv_path)
-    return image_dataset_from_dataframe(df, path_col, label_col, label_mode, class_names, color_mode, batch_size, image_size, shuffle, seed, validation_split, subset, interpolation, crop_to_aspect_ratio)
+    return image_dataset_from_dataframe(df, path_col, label_col, image_dir, label_mode, class_names, color_mode, batch_size, image_size, shuffle, seed, validation_split, subset, interpolation, crop_to_aspect_ratio)
 
 # TODO: Add doc
 def image_dataset_from_dataframe(
     df,
     path_col,
     label_col,
+    image_dir='',
     label_mode='int',
     class_names=None,
     color_mode='rgb',
@@ -316,7 +318,8 @@ def image_dataset_from_dataframe(
             '"categorical", "multi_label", "binary", '
             f'or None. Received: label_mode={label_mode}'
         )
-    image_paths = df[path_col].values.tolist()
+    image_dir = image_dir + '/' if image_dir != '' and image_dir[-1] != '/' else image_dir
+    image_paths = (image_dir + df[path_col].values).tolist()
     labels = df[label_col].values.tolist()
     return image_dataset_from_paths_and_labels(image_paths, labels, label_mode, class_names, color_mode, batch_size, image_size, shuffle, seed, validation_split, subset, interpolation, crop_to_aspect_ratio)
 
