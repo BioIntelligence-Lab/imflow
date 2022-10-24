@@ -59,6 +59,9 @@ def load_image(
     '''Load an image from a path and resize it.'''
     img_bytes = tf.io.read_file(path)
     if tf.strings.regex_full_match(path, '.*\.dcm.*'):
+        # TODO: Add support for Multiframe DICOM
+        # TODO: Add support for creating 3D input from MRI/CT slices
+        # Idea: Provide each MRI/CT as list of paths to slices in order
         img = tfio.image.decode_dicom_image(img_bytes, scale='auto', dtype=tf.uint8)
         assert_op = tf.Assert(tf.math.equal(tf.shape(img)[0], 1), ['Multiframe DICOM files are not supported. Received Tensor with shape:', tf.shape(img)])
         with tf.control_dependencies([assert_op]):
@@ -125,7 +128,7 @@ def image_dataset_from_directory(
     images from the subdirectories `class_a` and `class_b`, together with labels
     0 and 1 (0 corresponding to `class_a` and 1 corresponding to `class_b`).
 
-    Supported image formats: jpeg, png, bmp, gif.
+    Supported image formats: jpeg, png, bmp, gif, dcm.
     Animated gifs are truncated to the first frame.
 
     Args:
@@ -143,6 +146,7 @@ def image_dataset_from_directory(
       label_mode: String describing the encoding of `labels`. Options are:
           - 'int': means that the labels are encoded as integers
               (e.g. for `sparse_categorical_crossentropy` loss).
+          - 'multi_label': means that the labels are encoded as a one hot vector.
           - 'categorical' means that the labels are
               encoded as a categorical vector
               (e.g. for `categorical_crossentropy` loss).
@@ -232,10 +236,10 @@ def image_dataset_from_directory(
                 f'`labels="inferred"`. Received: labels={labels}, and '
                 f'class_names={class_names}'
             )
-    if label_mode not in {'int', 'categorical', 'one_hot', 'binary', None}:
+    if label_mode not in {'int', 'categorical', 'multi_label', 'binary', None}:
         raise ValueError(
             '`label_mode` argument must be one of "int", '
-            '"categorical", "one_hot", "binary", '
+            '"categorical", "multi_label", "binary", '
             f'or None. Received: label_mode={label_mode}'
         )
     if labels is None or label_mode is None:
@@ -303,13 +307,13 @@ def image_dataset_from_dataframe(
     if not isinstance(path_col, str):
         raise ValueError(
             '`label_mode` argument must be one of "int", '
-            '"categorical", "one_hot", "binary", '
+            '"categorical", "multi_label", "binary", '
             f'or None. Received: label_mode={label_mode}'
         )
     if not isinstance(label_col, (str, list)):
         raise ValueError(
             '`label_mode` argument must be one of "int", '
-            '"categorical", "one_hot", "binary", '
+            '"categorical", "multi_label", "binary", '
             f'or None. Received: label_mode={label_mode}'
         )
     image_paths = df[path_col].values.tolist()
@@ -453,10 +457,10 @@ def image_dataset_from_paths_and_labels(
             'If you wish to get a dataset that only contains images '
             f'(no labels), pass `labels=None`. Received: labels={labels}'
         )
-    if label_mode not in {'int', 'categorical', 'one_hot', 'binary', None}:
+    if label_mode not in {'int', 'categorical', 'multi_label', 'binary', None}:
         raise ValueError(
             '`label_mode` argument must be one of "int", '
-            '"categorical", "one_hot", "binary", '
+            '"categorical", "multi_label", "binary", '
             f'or None. Received: label_mode={label_mode}'
         )
     if labels is None or label_mode is None:
