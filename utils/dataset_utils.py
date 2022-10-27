@@ -478,6 +478,7 @@ def get_batch_size(tf_dataset):
 def index_directory(
     directory,
     labels,
+    label_mode,
     formats,
     class_names=None,
     shuffle=True,
@@ -487,36 +488,33 @@ def index_directory(
     """Make list of all files in the subdirs of `directory`, with their labels.
 
     Args:
-      directory: The target directory (string).
-      labels: Either "inferred"
-          (labels are generated from the directory structure),
-          None (no labels),
-          or a list/tuple of integer labels of the same size as the number of
-          valid files found in the directory. Labels should be sorted according
-          to the alphanumeric order of the image file paths
-          (obtained via `os.walk(directory)` in Python).
-      formats: Allowlist of file extensions to index (e.g. ".jpg", ".txt").
-      class_names: Only valid if "labels" is "inferred". This is the explicit
-          list of class names (must match names of subdirectories). Used
-          to control the order of the classes
-          (otherwise alphanumerical order is used).
-      shuffle: Whether to shuffle the data. Default: True.
-          If set to False, sorts the data in alphanumeric order.
-      seed: Optional random seed for shuffling.
-      follow_links: Whether to visits subdirectories pointed to by symlinks.
+        directory: The target directory (string).
+        labels: Either "inferred"
+            (labels are generated from the directory structure),
+            None (no labels),
+            or a list/tuple of integer labels of the same size as the number of
+            valid files found in the directory. Labels should be sorted according
+            to the alphanumeric order of the image file paths
+            (obtained via `os.walk(directory)` in Python).
+        label_mode:
+        formats: Allowlist of file extensions to index (e.g. ".jpg", ".txt").
+        class_names: Only valid if "labels" is "inferred". This is the explicit
+            list of class names (must match names of subdirectories). Used
+            to control the order of the classes
+            (otherwise alphanumerical order is used).
+        shuffle: Whether to shuffle the data. Default: True.
+            If set to False, sorts the data in alphanumeric order.
+        seed: Optional random seed for shuffling.
+        follow_links: Whether to visits subdirectories pointed to by symlinks.
 
     Returns:
-      tuple (file_paths, labels, class_names).
-        file_paths: list of file paths (strings).
-        labels: list of matching integer labels (same length as file_paths)
-        class_names: names of the classes corresponding to these labels, in
-          order.
+        tuple (file_paths, labels, class_names).
+            file_paths: list of file paths (strings).
+            labels: list of matching integer labels (same length as file_paths)
+            class_names: names of the classes corresponding to these labels, in
+                order.
     """
-    if labels is None:
-        # in the no-label case, index from the parent directory down.
-        subdirs = [""]
-        class_names = subdirs
-    else:
+    if labels == 'inferred':
         subdirs = []
         for subdir in sorted(tf.io.gfile.listdir(directory)):
             if tf.io.gfile.isdir(tf.io.gfile.join(directory, subdir)):
@@ -532,6 +530,10 @@ def index_directory(
                     "names of the subdirectories of the target directory. "
                     f"Expected: {subdirs}, but received: {class_names}"
                 )
+    else:
+        subdirs = [""]
+        class_names = []
+
     class_indices = dict(zip(class_names, range(len(class_names))))
 
     # Build an index of the files
@@ -560,20 +562,24 @@ def index_directory(
                 f"{len(labels)} while we found {len(filenames)} files "
                 f"in directory {directory}."
             )
-    else:
+    elif labels != None:
         i = 0
         labels = np.zeros((len(filenames),), dtype="int32")
         for partial_labels in labels_list:
             labels[i : i + len(partial_labels)] = partial_labels
             i += len(partial_labels)
 
-    if labels is None:
-        print(f"Found {len(filenames)} files.")
-    else:
+    if len(class_names) > 0:
         print(
             f"Found {len(filenames)} files belonging "
             f"to {len(class_names)} classes."
         )
+    else:
+        if label_mode is None:
+            print(f"Found {len(filenames)} files.")
+        else:
+            print(f"Found {len(filenames)} files with `{label_mode}` label mode.")
+        
     pool.close()
     pool.join()
     file_paths = [tf.io.gfile.join(directory, fname) for fname in filenames]
@@ -584,8 +590,9 @@ def index_directory(
             seed = np.random.randint(1e6)
         rng = np.random.RandomState(seed)
         rng.shuffle(file_paths)
-        rng = np.random.RandomState(seed)
-        rng.shuffle(labels)
+        if isinstance(labels, np.ndarray):
+            rng = np.random.RandomState(seed)
+            rng.shuffle(labels)
     return file_paths, labels, class_names
 
 
@@ -620,7 +627,9 @@ def index_subdirectory(directory, class_indices, follow_links, formats):
     labels = []
     filenames = []
     for root, fname in valid_files:
-        labels.append(class_indices[dirname])
+        # In no label mode, don't append unneccessary labels
+        if len(class_indices) != 0:
+            labels.append(class_indices[dirname])
         absolute_path = tf.io.gfile.join(root, fname)
         relative_path = tf.io.gfile.join(
             dirname, os.path.relpath(absolute_path, directory)
@@ -689,6 +698,7 @@ def labels_to_dataset(labels, label_mode, num_classes):
             lambda x: tf.one_hot(x, num_classes),
             num_parallel_calls=tf.data.AUTOTUNE,
         )
+    # For all other label modes, keep labels unchanged
     return label_ds
 
 

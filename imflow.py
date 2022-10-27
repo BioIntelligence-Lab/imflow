@@ -236,10 +236,10 @@ def image_dataset_from_directory(
                 f'`labels="inferred"`. Received: labels={labels}, and '
                 f'class_names={class_names}'
             )
-    if label_mode not in {'int', 'categorical', 'multi_label', 'binary', None}:
+    if label_mode not in {'int', 'categorical', 'multi_label', 'binary', 'custom', None}:
         raise ValueError(
             '`label_mode` argument must be one of "int", '
-            '"categorical", "multi_label", "binary", '
+            '"categorical", "multi_label", "binary", "custom", '
             f'or None. Received: label_mode={label_mode}'
         )
     if labels is None or label_mode is None:
@@ -252,17 +252,18 @@ def image_dataset_from_directory(
     image_paths, labels, class_names = dataset_utils.index_directory(
         directory,
         labels,
+        label_mode,
         formats=ALLOWLIST_FORMATS,
         class_names=class_names,
         shuffle=shuffle,
         seed=seed,
         follow_links=follow_links,
     )
-
-    if label_mode == 'binary' and len(class_names) != 2:
+    
+    if label_mode == 'binary' and len(np.unique(labels, axis=0)) != 2:
         raise ValueError(
             f'When passing `label_mode="binary"`, there must be exactly 2 '
-            f'class_names. Received: class_names={class_names}'
+            f'classes'
         )
 
     return image_dataset_from_paths_and_labels(image_paths, labels, label_mode, class_names, color_mode, batch_size, image_size, shuffle, seed, validation_split, subset, interpolation, crop_to_aspect_ratio)
@@ -309,13 +310,13 @@ def image_dataset_from_dataframe(
     if not isinstance(path_col, str):
         raise ValueError(
             '`label_mode` argument must be one of "int", '
-            '"categorical", "multi_label", "binary", '
+            '"categorical", "multi_label", "binary", "custom", '
             f'or None. Received: label_mode={label_mode}'
         )
     if not isinstance(label_col, (str, list)):
         raise ValueError(
             '`label_mode` argument must be one of "int", '
-            '"categorical", "multi_label", "binary", '
+            '"categorical", "multi_label", "binary", "custom", '
             f'or None. Received: label_mode={label_mode}'
         )
     image_dir = image_dir + '/' if image_dir != '' and image_dir[-1] != '/' else image_dir
@@ -450,7 +451,7 @@ def image_dataset_from_paths_and_labels(
         class_names = np.unique(labels).tolist()
     if isinstance(labels, np.ndarray):
         labels = labels.tolist()
-    if not isinstance(labels, (list, tuple)):
+    if labels != None and not isinstance(labels, (list, tuple)):
         raise ValueError(
             '`labels` argument should be a list/tuple of integer labels, '
             'of the same size as the number of image files in the target '
@@ -463,7 +464,7 @@ def image_dataset_from_paths_and_labels(
     if label_mode not in {'int', 'categorical', 'multi_label', 'binary', None}:
         raise ValueError(
             '`label_mode` argument must be one of "int", '
-            '"categorical", "multi_label", "binary", '
+            '"categorical", "multi_label", "binary", "custom", '
             f'or None. Received: label_mode={label_mode}'
         )
     if labels is None or label_mode is None:
