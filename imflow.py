@@ -129,7 +129,7 @@ def image_dataset_from_directory(
     0 and 1 (0 corresponding to `class_a` and 1 corresponding to `class_b`).
 
     Supported image formats: jpeg, png, bmp, gif, dcm.
-    Animated gifs are truncated to the first frame.
+    Currently, `imflow` does not support 3D data. Animated gifs are truncated to the first frame and multi-frame DICOMs are not supported.
 
     Args:
       directory: Directory where the data is located.
@@ -144,15 +144,16 @@ def image_dataset_from_directory(
           to the alphanumeric order of the image file paths
           (obtained via `os.walk(directory)` in Python).
       label_mode: String describing the encoding of `labels`. Options are:
-          - 'int': means that the labels are encoded as integers
+            - 'int': means that the labels are encoded as integers
               (e.g. for `sparse_categorical_crossentropy` loss).
-          - 'multi_label': means that the labels are encoded as a one hot vector.
-          - 'categorical' means that the labels are
+            - 'categorical' means that the labels are
               encoded as a categorical vector
               (e.g. for `categorical_crossentropy` loss).
-          - 'binary' means that the labels (there can be only 2)
+            - 'multi_label': means that the labels are encoded as a one hot vector (e.g. for `binary_crossentropy`). Note that this is different from `categorical`, which assumes every class is mutually exclusive.
+            - 'binary': means that the labels (there can be only 2)
               are encoded as `float32` scalars with values 0 or 1
               (e.g. for `binary_crossentropy`).
+            - 'custom': enables the use of custom ground truths for tasks beyond classification. Note that currently only integer-based labels are supported but this may change in the future to add support for segmentation masks, bounding boxes, etc.
           - None (no labels).
       class_names: Only valid if "labels" is "inferred". This is the explicit
           list of class names (must match names of subdirectories). Used
