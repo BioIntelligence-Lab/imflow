@@ -16,6 +16,7 @@
 # ==============================================================================
 '''ImFlow'''
 
+import sys
 import numpy as np
 import pandas as pd
 import tensorflow_io as tfio
@@ -48,6 +49,16 @@ def paths_and_labels_to_dataset(
     img_ds = tf.data.Dataset.zip((img_ds, label_ds))
   return img_ds
 
+def npz_loader(path, num_channels):
+  x = np.load(path)['arr_0'].astype(np.float32)
+  if x.ndim == 2:
+    x = np.expand_dims(x, axis=-1)
+    if num_channels == 3:
+      x = np.concatenate((x,)*3, axis=-1)
+    if num_channels == 4:
+      x = np.concatenate((x,)*4, axis=-1)
+    return x
+      
 def load_image(
   path, 
   image_size, 
@@ -56,36 +67,40 @@ def load_image(
   crop_to_aspect_ratio=False
 ):
   '''Load an image from a path and resize it.'''
-  img_bytes = tf.io.read_file(path)
   if tf.strings.regex_full_match(path, '.*\.dcm.*'):
     # TODO: Add support for Multiframe DICOM
     # TODO: Add support for creating 3D input from MRI/CT slices
     # Idea: Provide each MRI/CT as list of paths to slices in order
+    img_bytes = tf.io.read_file(path)
     img = tfio.image.decode_dicom_image(img_bytes, scale='auto', dtype=tf.uint8)
     assert_op = tf.Assert(tf.math.equal(tf.shape(img)[0], 1), ['Multiframe DICOM files are not supported. Received Tensor with shape:', tf.shape(img)])
     with tf.control_dependencies([assert_op]):
       img = tf.squeeze(img, axis=0)
       if num_channels == 3:
-        img = tf.concat((img, img, img), axis=2)
+        img = tf.concat((img, img, img), axis=-1) # changes from 2 to -1
       elif num_channels == 4:
-        img = tf.concat((img, img, img, tf.math.multiply(tf.ones(tf.shape(img), dtype=tf.uint8), 255)), axis=2)
-      # TODO: Check if smart_resize works
+        img = tf.concat((img, img, img, tf.math.multiply(tf.ones(tf.shape(img), dtype=tf.uint8), 255)), axis=-1)
       if crop_to_aspect_ratio:
-        img = image_utils.smart_resize(
-          img, image_size, interpolation=interpolation
-        )
+        img = tf.image.resize_with_crop_or_pad(img, image_size[0], image_size[1], method=interpolation)
       else:
         img = tf.image.resize(img, image_size, method=interpolation)
       img.set_shape((image_size[0], image_size[1], num_channels))
       return img
+  elif tf.strings.regex_full_match(path, '.*\.npz.*'):
+    img= tf.numpy_function(npz_loader, [path, num_channels], tf.float32)
+    if crop_to_aspect_ratio:
+      img = tf.image.resize_with_crop_or_pad(img, image_size[0], image_size[1], method=interpolation)
+    else:
+      img = tf.image.resize_with_pad(img, image_size[0], image_size[1], method=interpolation)
+    img.set_shape((image_size[0], image_size[1], num_channels))
+    return img
   else:
+    img_bytes = tf.io.read_file(path)
     img = tf.image.decode_image(
       img_bytes, channels=num_channels, expand_animations=False
     )
     if crop_to_aspect_ratio:
-      img = image_utils.smart_resize(
-        img, image_size, interpolation=interpolation
-      )
+      img = tf.image.resize_with_crop_or_pad(img, image_size[0], image_size[1], method=interpolation)
     else:
       img = tf.image.resize(img, image_size, method=interpolation)
     img.set_shape((image_size[0], image_size[1], num_channels))
