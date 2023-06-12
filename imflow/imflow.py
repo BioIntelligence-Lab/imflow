@@ -21,6 +21,8 @@ import numpy as np
 import pandas as pd
 import tensorflow_io as tfio
 import tensorflow.compat.v2 as tf
+import nibabel as nib
+import pydicom
 
 from .utils import dataset_utils, image_utils
 
@@ -49,8 +51,7 @@ def paths_and_labels_to_dataset(
     img_ds = tf.data.Dataset.zip((img_ds, label_ds))
   return img_ds
 
-def npz_loader(path, num_channels):
-  x = np.load(path)['arr_0'].astype(np.float32)
+def numpy_channels(x, num_channels):
   if x.ndim == 2:
     x = np.expand_dims(x, axis=-1)
     if num_channels == 3:
@@ -58,6 +59,22 @@ def npz_loader(path, num_channels):
     if num_channels == 4:
       x = np.concatenate((x,)*4, axis=-1)
     return x
+
+def decode_npz_image(path, num_channels):
+  x = np.load(path)['arr_0'].astype(np.float32)
+  return numpy_channels(x, num_channels)
+  
+def decode_npy_image(path, num_channels):
+  x = np.load(path).astype(np.float32)
+  return numpy_channels(x, num_channels)
+
+# def decode_nifti_image(path, num_channels):
+#   x = nib.load(path).get_fdata().astype(np.float32)
+#   return numpy_channels(x, num_channels)
+
+# def decode_dicom_image(path, num_channels):
+#   x = pydicom.dcmread(path).pixel_array.astype(np.float32)
+#   return numpy_channels(x, num_channels)
       
 def load_image(
   path, 
@@ -87,13 +104,29 @@ def load_image(
       img.set_shape((image_size[0], image_size[1], num_channels))
       return img
   elif tf.strings.regex_full_match(path, '.*\.npz.*'):
-    img= tf.numpy_function(npz_loader, [path, num_channels], tf.float32)
+    img= tf.numpy_function(decode_npz_image, [path, num_channels], tf.float32)
     if crop_to_aspect_ratio:
       img = tf.image.resize_with_crop_or_pad(img, image_size[0], image_size[1], method=interpolation)
     else:
       img = tf.image.resize_with_pad(img, image_size[0], image_size[1], method=interpolation)
     img.set_shape((image_size[0], image_size[1], num_channels))
     return img
+  elif tf.strings.regex_full_match(path, '.*\.npy.*'):
+    img= tf.numpy_function(decode_npy_image, [path, num_channels], tf.float32)
+    if crop_to_aspect_ratio:
+      img = tf.image.resize_with_crop_or_pad(img, image_size[0], image_size[1], method=interpolation)
+    else:
+      img = tf.image.resize_with_pad(img, image_size[0], image_size[1], method=interpolation)
+    img.set_shape((image_size[0], image_size[1], num_channels))
+    return img
+  # elif tf.strings.regex_full_match(path, '.*\.nii.*'):
+  #   img= tf.numpy_function(decode_nifti_image, [path, num_channels], tf.float32)
+  #   if crop_to_aspect_ratio:
+  #     img = tf.image.resize_with_crop_or_pad(img, image_size[0], image_size[1], method=interpolation)
+  #   else:
+  #     img = tf.image.resize_with_pad(img, image_size[0], image_size[1], method=interpolation)
+  #   img.set_shape((image_size[0], image_size[1], num_channels))
+  #   return img
   else:
     img_bytes = tf.io.read_file(path)
     img = tf.image.decode_image(
