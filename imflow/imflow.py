@@ -36,11 +36,11 @@ def paths_and_labels_to_dataset(
   label_mode,
   num_classes,
   interpolation,
-  crop_to_aspect_ratio=False,
+  resize_with_pad=False,
 ):
   '''Constructs a dataset of images and labels.'''
   path_ds = tf.data.Dataset.from_tensor_slices(image_paths)
-  args = (image_size, num_channels, interpolation, crop_to_aspect_ratio)
+  args = (image_size, num_channels, interpolation, resize_with_pad)
   img_ds = path_ds.map(
     lambda x: load_image(x, *args), num_parallel_calls=tf.data.AUTOTUNE
   )
@@ -81,7 +81,7 @@ def load_image(
   image_size, 
   num_channels, 
   interpolation, 
-  crop_to_aspect_ratio=False
+  resize_with_pad=False
 ):
   '''Load an image from a path and resize it.'''
   if tf.strings.regex_full_match(path, '.*\.dcm.*'):
@@ -97,34 +97,34 @@ def load_image(
         img = tf.concat((img, img, img), axis=-1) # changes from 2 to -1
       elif num_channels == 4:
         img = tf.concat((img, img, img, tf.math.multiply(tf.ones(tf.shape(img), dtype=tf.uint8), 255)), axis=-1)
-      if crop_to_aspect_ratio:
-        img = tf.image.resize_with_crop_or_pad(img, image_size[0], image_size[1], method=interpolation)
+      if resize_with_pad:
+        img = tf.image.resize_with_pad(img, image_size[0], image_size[1], method=interpolation)
       else:
         img = tf.image.resize(img, image_size, method=interpolation)
       img.set_shape((image_size[0], image_size[1], num_channels))
       return img
   elif tf.strings.regex_full_match(path, '.*\.npz.*'):
     img= tf.numpy_function(decode_npz_image, [path, num_channels], tf.float32)
-    if crop_to_aspect_ratio:
-      img = tf.image.resize_with_crop_or_pad(img, image_size[0], image_size[1], method=interpolation)
-    else:
+    if resize_with_pad:
       img = tf.image.resize_with_pad(img, image_size[0], image_size[1], method=interpolation)
+    else:
+      img = tf.image.resize(img, image_size, method=interpolation)
     img.set_shape((image_size[0], image_size[1], num_channels))
     return img
   elif tf.strings.regex_full_match(path, '.*\.npy.*'):
     img= tf.numpy_function(decode_npy_image, [path, num_channels], tf.float32)
-    if crop_to_aspect_ratio:
-      img = tf.image.resize_with_crop_or_pad(img, image_size[0], image_size[1], method=interpolation)
-    else:
+    if resize_with_pad:
       img = tf.image.resize_with_pad(img, image_size[0], image_size[1], method=interpolation)
+    else:
+      img = tf.image.resize(img, image_size, method=interpolation)
     img.set_shape((image_size[0], image_size[1], num_channels))
     return img
   # elif tf.strings.regex_full_match(path, '.*\.nii.*'):
   #   img= tf.numpy_function(decode_nifti_image, [path, num_channels], tf.float32)
-  #   if crop_to_aspect_ratio:
+  #   if resize_with_pad:
   #     img = tf.image.resize_with_crop_or_pad(img, image_size[0], image_size[1], method=interpolation)
   #   else:
-  #     img = tf.image.resize_with_pad(img, image_size[0], image_size[1], method=interpolation)
+  #     img = tf.image.resize(img, image_size, method=interpolation)
   #   img.set_shape((image_size[0], image_size[1], num_channels))
   #   return img
   else:
@@ -132,8 +132,8 @@ def load_image(
     img = tf.image.decode_image(
       img_bytes, channels=num_channels, expand_animations=False
     )
-    if crop_to_aspect_ratio:
-      img = tf.image.resize_with_crop_or_pad(img, image_size[0], image_size[1], method=interpolation)
+    if resize_with_pad:
+      img = tf.image.resize_with_pad(img, image_size[0], image_size[1], method=interpolation)
     else:
       img = tf.image.resize(img, image_size, method=interpolation)
     img.set_shape((image_size[0], image_size[1], num_channels))
@@ -154,7 +154,7 @@ def image_dataset_from_directory(
   subset=None,
   interpolation='bilinear',
   follow_links=False,
-  crop_to_aspect_ratio=False,
+  resize_with_pad=False,
 ):
   '''Generates a `tf.data.Dataset` from image files in a directory.
 
@@ -231,12 +231,10 @@ def image_dataset_from_directory(
     `area`, `lanczos3`, `lanczos5`, `gaussian`, `mitchellcubic`.
     follow_links: Whether to visit subdirectories pointed to by symlinks.
       Defaults to False.
-    crop_to_aspect_ratio: If True, resize the images without aspect
-    ratio distortion. When the original aspect ratio differs from the target
-    aspect ratio, the output image will be cropped so as to return the
-    largest possible window in the image (of size `image_size`) that matches
-    the target aspect ratio. By default (`crop_to_aspect_ratio=False`),
-    aspect ratio may not be preserved.
+    resize_with_pad: If True, resize the images without aspect
+      ratio distortion. When the original aspect ratio differs from the target
+      aspect ratio, the output image will be resized with padding so as to return the image that matches the target `image size`. 
+      By default (`resize_with_pad=False`), aspect ratio may not be preserved.
     **kwargs: Legacy keyword arguments.
 
   Returns:
@@ -308,7 +306,7 @@ def image_dataset_from_directory(
     follow_links=follow_links,
   )
 
-  return image_dataset_from_paths_and_labels(image_paths, labels, label_mode, color_mode, batch_size, image_size, shuffle, seed, validation_split, subset, interpolation, crop_to_aspect_ratio)
+  return image_dataset_from_paths_and_labels(image_paths, labels, label_mode, color_mode, batch_size, image_size, shuffle, seed, validation_split, subset, interpolation, resize_with_pad)
 
 # TODO: Add doc
 def image_dataset_from_csv(
@@ -325,10 +323,10 @@ def image_dataset_from_csv(
   validation_split=None,
   subset=None,
   interpolation='bilinear',
-  crop_to_aspect_ratio=False
+  resize_with_pad=False
 ):
   df = pd.read_csv(csv_path)
-  return image_dataset_from_dataframe(df, path_col, label_col, image_dir, label_mode, color_mode, batch_size, image_size, shuffle, seed, validation_split, subset, interpolation, crop_to_aspect_ratio)
+  return image_dataset_from_dataframe(df, path_col, label_col, image_dir, label_mode, color_mode, batch_size, image_size, shuffle, seed, validation_split, subset, interpolation, resize_with_pad)
 
 # TODO: Add doc
 def image_dataset_from_dataframe(
@@ -345,7 +343,7 @@ def image_dataset_from_dataframe(
   validation_split=None,
   subset=None,
   interpolation='bilinear',
-  crop_to_aspect_ratio=False
+  resize_with_pad=False
 ):
   if not isinstance(path_col, str):
     raise ValueError(
@@ -362,7 +360,7 @@ def image_dataset_from_dataframe(
   image_dir = image_dir + '/' if image_dir != '' and image_dir[-1] != '/' else image_dir
   image_paths = (image_dir + df[path_col].values).tolist()
   labels = df[label_col].values.tolist()
-  return image_dataset_from_paths_and_labels(image_paths, labels, label_mode, color_mode, batch_size, image_size, shuffle, seed, validation_split, subset, interpolation, crop_to_aspect_ratio)
+  return image_dataset_from_paths_and_labels(image_paths, labels, label_mode, color_mode, batch_size, image_size, shuffle, seed, validation_split, subset, interpolation, resize_with_pad)
 
 # TODO: Update doc
 def image_dataset_from_paths_and_labels(
@@ -377,7 +375,7 @@ def image_dataset_from_paths_and_labels(
   validation_split=None,
   subset=None,
   interpolation='bilinear',
-  crop_to_aspect_ratio=False
+  resize_with_pad=False
 ):
   '''Generates a `tf.data.Dataset` from image files in a directory.
 
@@ -452,12 +450,10 @@ def image_dataset_from_paths_and_labels(
     `area`, `lanczos3`, `lanczos5`, `gaussian`, `mitchellcubic`.
     follow_links: Whether to visit subdirectories pointed to by symlinks.
       Defaults to False.
-    crop_to_aspect_ratio: If True, resize the images without aspect
-    ratio distortion. When the original aspect ratio differs from the target
-    aspect ratio, the output image will be cropped so as to return the
-    largest possible window in the image (of size `image_size`) that matches
-    the target aspect ratio. By default (`crop_to_aspect_ratio=False`),
-    aspect ratio may not be preserved.
+    resize_with_pad: If True, resize the images without aspect
+      ratio distortion. When the original aspect ratio differs from the target
+      aspect ratio, the output image will be resized with padding so as to return the image that matches the target `image size`. 
+      By default (`resize_with_pad=False`), aspect ratio may not be preserved.
     **kwargs: Legacy keyword arguments.
 
   Returns:
@@ -589,7 +585,7 @@ def image_dataset_from_paths_and_labels(
       label_mode=label_mode,
       num_classes=num_classes,
       interpolation=interpolation,
-      crop_to_aspect_ratio=crop_to_aspect_ratio,
+      resize_with_pad=resize_with_pad,
     )
     val_dataset = paths_and_labels_to_dataset(
       image_paths=image_paths_val,
@@ -599,7 +595,7 @@ def image_dataset_from_paths_and_labels(
       label_mode=label_mode,
       num_classes=num_classes,
       interpolation=interpolation,
-      crop_to_aspect_ratio=crop_to_aspect_ratio,
+      resize_with_pad=resize_with_pad,
     )
     train_dataset = train_dataset.prefetch(tf.data.AUTOTUNE)
     val_dataset = val_dataset.prefetch(tf.data.AUTOTUNE)
@@ -639,7 +635,7 @@ def image_dataset_from_paths_and_labels(
       label_mode=label_mode,
       num_classes=num_classes,
       interpolation=interpolation,
-      crop_to_aspect_ratio=crop_to_aspect_ratio,
+      resize_with_pad=resize_with_pad,
     )
     dataset = dataset.prefetch(tf.data.AUTOTUNE)
     if batch_size is not None:

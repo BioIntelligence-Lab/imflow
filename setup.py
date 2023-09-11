@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name = 'imflow',
-    version = '0.2.1',    
+    version = '0.2.2',    
     description = 'A better image dataset loader for TensorFlow.',
     url = 'https://github.com/UM2ii/intelligent_streaming',
     author = 'Pranav Kulkarni',
